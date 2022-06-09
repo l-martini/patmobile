@@ -46,7 +46,7 @@ public class MainActivity extends AppCompatActivity {
     private final int REQUEST_PERMISSION_BLUETOOTH_ADMIN = 2;
     private final int REQUEST_PERMISSION_BLUETOOTH_SCAN = 3;
 
-
+    String macAddress = null;
     String url = "https://tecnet.theoreo.it/patmob2/";
 
     @SuppressLint({"SetJavaScriptEnabled", "MissingPermission"})
@@ -75,15 +75,14 @@ public class MainActivity extends AppCompatActivity {
 
             // this.showBluetoothConnectPermission();
             // this.showBluetoothAdminPermission();
-            this.showBluetoothScanPermission();
+            // this.showBluetoothScanPermission();
 
             Set<BluetoothDevice> devices = bluetoothAdapter.getBondedDevices();
-            String macAddress = null;
             for (BluetoothDevice device : devices) {
                 System.out.println("\n Device : " + device.getName() + " , " + device);
                 if (device.getName().equalsIgnoreCase("XXZSJ221000063")) {
-                    macAddress = device.getAddress();
-                    this.sendCpclOverBluetooth(macAddress);
+                    this.macAddress = device.getAddress();
+                    // this.sendCpclOverBluetooth(macAddress);
                 }
             }
         }
@@ -96,7 +95,7 @@ public class MainActivity extends AppCompatActivity {
 
 
         webView.getSettings().setJavaScriptEnabled(true);
-        webView.addJavascriptInterface(new JsPrintInterface(this), "Android");
+        webView.addJavascriptInterface(new JsPrintInterface(this, this.macAddress), "Android");
         webView.getSettings().setSupportZoom(false);
         webView.getSettings().setDomStorageEnabled(true);
         webView.setWebViewClient(new myWebViewclient());
@@ -150,7 +149,11 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    private void sendCpclOverBluetooth(final String theBtMacAddress) {
+    public void sendCpclOverBluetooth() {
+        this.printOverBluetooth(macAddress);
+    }
+
+    private void printOverBluetooth(final String theBtMacAddress) {
         new Thread(new Runnable() {
             public void run() {
                 try {
@@ -164,11 +167,18 @@ public class MainActivity extends AppCompatActivity {
                     // Open the connection - physical connection is established here.
                     thePrinterConn.open();
 
-                    // This example prints "This is a CPCL test." near the top of the label.
-                    String cpclData = "! 0 200 200 210 1\r\n"
-                            + "TEXT 4 0 30 40 This is a CPCL test.\r\n"
-                            + "FORM\r\n"
-                            + "PRINT\r\n";
+                    StringBuilder sb = new StringBuilder("! 0 200 200 438 1\r\n");
+                    sb.append("PW 575\r\n")
+                            .append("TONE 0\r\n")
+                            .append("SPEED 2\r\n")
+                            .append("ON-FEED IGNORE\r\n")
+                            .append("NO-PACE\r\n")
+                            .append("BAR-SENSE\r\n")
+                            .append("T 5 2 10 309 Numero Inventario: 123123123")
+                            .append("BT 7 0 9\r\n")
+                            .append("B 128 4 30 132 36 37 123456789012\r\n")
+                            .append("PRINT\r\n");
+                    String cpclData = sb.toString();
 
                     // Send the data to printer as a byte array.
                     thePrinterConn.write(cpclData.getBytes());
