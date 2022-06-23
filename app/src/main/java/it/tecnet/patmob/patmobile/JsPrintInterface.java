@@ -51,11 +51,11 @@ public class JsPrintInterface {
                             .append("MA,99999999\r\n")
                             .append("ENDQR\r\n")
                             .append("CENTER\r\n")
-                            .append("T 5 2 27 233 Numero Inventario:")
+                            .append("T 5 2 0 233 Numero Inventario:")
                             .append(numeroInventario)
                             .append("\r\n")
                             .append("CENTER\r\n")
-                            .append("T 5 0 64 292 ")
+                            .append("T 5 0 0 292 ")
                             .append(modello)
                             .append("\r\n")
                             .append("PRINT\r\n");
