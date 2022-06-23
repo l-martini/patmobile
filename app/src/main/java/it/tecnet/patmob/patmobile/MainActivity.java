@@ -24,11 +24,12 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.webkit.DownloadListener;
 import android.webkit.MimeTypeMap;
+import android.webkit.PermissionRequest;
 import android.webkit.SslErrorHandler;
+import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.ProgressBar;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import com.zebra.sdk.comm.BluetoothConnectionInsecure;
@@ -39,15 +40,17 @@ import java.util.Set;
 public class MainActivity extends AppCompatActivity {
     WebView webView;
     ProgressBar progressBar;
+    private PermissionRequest mPermissionRequest;
     SwipeRefreshLayout swipeRefreshLayout;
     BluetoothAdapter bluetoothAdapter;
 
     private final int REQUEST_PERMISSION_BLUETOOTH_CONNECT = 1;
     private final int REQUEST_PERMISSION_BLUETOOTH_ADMIN = 2;
     private final int REQUEST_PERMISSION_BLUETOOTH_SCAN = 3;
+    private final int REQUEST_PERMISSION_CAMERA = 4;
 
     String macAddress = null;
-    String url = "https://tecnet.theoreo.it/patmob2/";
+    String applicationUrl = "https://tecnet.theoreo.it/patmob2/";
 
     @SuppressLint({"SetJavaScriptEnabled", "MissingPermission"})
     @Override
@@ -66,23 +69,16 @@ public class MainActivity extends AppCompatActivity {
             dlgAlert.setCancelable(true);
             dlgAlert.create().show();
         } else {
-            AlertDialog.Builder dlgAlert = new AlertDialog.Builder(this);
-            dlgAlert.setMessage("Bluetooth disponibile, le funzionalità di stampa saranno disponibili");
-            dlgAlert.setTitle("Attenzione");
-            dlgAlert.setPositiveButton("OK", null);
-            dlgAlert.setCancelable(true);
-            dlgAlert.create().show();
-
             // this.showBluetoothConnectPermission();
             // this.showBluetoothAdminPermission();
             // this.showBluetoothScanPermission();
+            this.showCameraPermission();
 
             Set<BluetoothDevice> devices = bluetoothAdapter.getBondedDevices();
             for (BluetoothDevice device : devices) {
                 System.out.println("\n Device : " + device.getName() + " , " + device);
                 if (device.getName().equalsIgnoreCase("XXZSJ221000063")) {
                     this.macAddress = device.getAddress();
-                    // this.sendCpclOverBluetooth(macAddress);
                 }
             }
         }
@@ -93,13 +89,53 @@ public class MainActivity extends AppCompatActivity {
         progressBar = findViewById(R.id.progress);
         swipeRefreshLayout = findViewById(R.id.swipe);
 
-
+        // setup webview
         webView.getSettings().setJavaScriptEnabled(true);
         webView.addJavascriptInterface(new JsPrintInterface(this, this.macAddress), "Android");
         webView.getSettings().setSupportZoom(false);
         webView.getSettings().setDomStorageEnabled(true);
         webView.setWebViewClient(new myWebViewclient());
-        webView.loadUrl(url);
+        webView.setWebChromeClient(new WebChromeClient() {
+            // Grant permissions for cam
+            @Override
+            public void onPermissionRequest(final PermissionRequest request) {
+                mPermissionRequest = request;
+                final String[] requestedResources = request.getResources();
+                for (String r : requestedResources) {
+                    if (r.equals(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) {
+                        // In this sample, we only accept video capture request.
+                        AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(MainActivity.this)
+                                .setTitle("Consenti l'accesso alla telecamera")
+                                .setPositiveButton("Permetti", new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        dialog.dismiss();
+                                        mPermissionRequest.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
+                                    }
+                                })
+                                .setNegativeButton("Nega", new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface dialog, int which) {
+                                        dialog.dismiss();
+                                        mPermissionRequest.deny();
+                                    }
+                                });
+                        AlertDialog alertDialog = alertDialogBuilder.create();
+                        alertDialog.show();
+
+                        break;
+                    }
+                }
+            }
+
+            @Override
+            public void onPermissionRequestCanceled(PermissionRequest request) {
+                super.onPermissionRequestCanceled(request);
+                Toast.makeText(MainActivity.this,"Impossibile avviare telecamera, permesso negato",Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        webView.loadUrl(applicationUrl);
 
         swipeRefreshLayout.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
             @Override
@@ -109,7 +145,7 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void run() {
                         swipeRefreshLayout.setRefreshing(false);
-                        webView.loadUrl(url);
+                        webView.loadUrl(applicationUrl);
                     }
                 }, 3000);
             }
@@ -125,7 +161,7 @@ public class MainActivity extends AppCompatActivity {
         //  ==================== START HERE: THIS CODE BLOCK IS TO ENABLE FILE DOWNLOAD FROM THE WEB. YOU CAN COMMENT IT OUT IF YOUR APPLICATION DOES NOT REQUIRE FILE DOWNLOAD. IT WAS ADDED ON REQUEST ======//
 
         webView.setDownloadListener(new DownloadListener() {
-            String fileName = MimeTypeMap.getFileExtensionFromUrl(url);
+            String fileName = MimeTypeMap.getFileExtensionFromUrl(applicationUrl);
 
             @Override
             public void onDownloadStart(String url, String userAgent,
@@ -140,65 +176,13 @@ public class MainActivity extends AppCompatActivity {
                 request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName);
                 DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
                 dm.enqueue(request);
-                Toast.makeText(getApplicationContext(), "Downloading File", //To notify the Client that the file is being downloaded
+                Toast.makeText(getApplicationContext(), "Scaricamento in  corso...", //To notify the Client that the file is being downloaded
                         Toast.LENGTH_LONG).show();
 
             }
         });
         //  ==================== END HERE: THIS CODE BLOCK IS TO ENABLE FILE DOWNLOAD FROM THE WEB. YOU CAN COMMENT IT OUT IF YOUR APPLICATION DOES NOT REQUIRE FILE DOWNLOAD. IT WAS ADDED ON REQUEST ======//
 
-    }
-
-    public void sendCpclOverBluetooth() {
-        this.printOverBluetooth(macAddress);
-    }
-
-    private void printOverBluetooth(final String theBtMacAddress) {
-        new Thread(new Runnable() {
-            public void run() {
-                try {
-
-                    // Instantiate insecure connection for given Bluetooth&reg; MAC Address.
-                    Connection thePrinterConn = new BluetoothConnectionInsecure(theBtMacAddress);
-
-                    // Initialize
-                    Looper.prepare();
-
-                    // Open the connection - physical connection is established here.
-                    thePrinterConn.open();
-
-                    StringBuilder sb = new StringBuilder("! 0 200 200 438 1\r\n");
-                    sb.append("PW 575\r\n")
-                            .append("TONE 0\r\n")
-                            .append("SPEED 2\r\n")
-                            .append("ON-FEED IGNORE\r\n")
-                            .append("NO-PACE\r\n")
-                            .append("BAR-SENSE\r\n")
-                            .append("T 5 2 10 309 Numero Inventario: 123123123")
-                            .append("BT 7 0 9\r\n")
-                            .append("B 128 4 30 132 36 37 123456789012\r\n")
-                            .append("PRINT\r\n");
-                    String cpclData = sb.toString();
-
-                    // Send the data to printer as a byte array.
-                    thePrinterConn.write(cpclData.getBytes());
-
-                    // Make sure the data got to the printer before closing the connection
-                    Thread.sleep(500);
-
-                    // Close the insecure connection to release resources.
-                    thePrinterConn.close();
-
-                    Looper.myLooper().quit();
-
-                } catch (Exception e) {
-
-                    // Handle communications error here.
-                    e.printStackTrace();
-
-                }
-            }
-        }).start();
     }
 
     private void showBluetoothConnectPermission() {
@@ -252,6 +236,34 @@ public class MainActivity extends AppCompatActivity {
                 }).create().show();
             } else {
                 requestPermission(Manifest.permission.BLUETOOTH_ADMIN, REQUEST_PERMISSION_BLUETOOTH_ADMIN);
+            }
+        }
+    }
+
+    private void showCameraPermission() {
+        System.out.println("###### SHOW CAMERA PERMISSION @@@@@@");
+        int permissionCheck = ContextCompat.checkSelfPermission(
+                MainActivity.this, Manifest.permission.CAMERA);
+        if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
+            System.out.println("###### PERMISSION CAMERA GRANTED @@@@@@");
+        } else {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.CAMERA)) {
+                System.out.println("###### SHOW CAMERA DIALOG @@@@@@");
+
+                new AlertDialog.Builder(this).setTitle("Permission needed").setMessage("Camera is needed to read qr code").setPositiveButton("ok", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialogInterface, int i) {
+                        requestPermission(Manifest.permission.CAMERA, REQUEST_PERMISSION_CAMERA);
+                    }
+                }).setNegativeButton("cancel", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialogInterface, int i) {
+                        dialogInterface.dismiss();
+                    }
+                }).create().show();
+            } else {
+                requestPermission(Manifest.permission.CAMERA, REQUEST_PERMISSION_CAMERA);
             }
         }
     }
@@ -325,7 +337,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public class myWebViewclient extends WebViewClient {
-
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, String url) {
             view.loadUrl(url);
@@ -334,7 +345,7 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-            Toast.makeText(getApplicationContext(), "No internet connection", Toast.LENGTH_LONG).show();
+            Toast.makeText(getApplicationContext(), "Nessuna connessione internet", Toast.LENGTH_LONG).show();
             webView.loadUrl("file:///android_asset/lost.html");
         }
 
@@ -360,7 +371,6 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-
         if ((keyCode == KeyEvent.KEYCODE_BACK) && webView.canGoBack()) {
             webView.goBack();
             return true;

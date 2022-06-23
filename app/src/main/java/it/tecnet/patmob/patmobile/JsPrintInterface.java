@@ -11,18 +11,21 @@ import com.zebra.sdk.comm.Connection;
 public class JsPrintInterface {
     Context mContext;
     String macAddress = null;
-    /** Instantiate the interface and set the context */
+
+    /**
+     * Instantiate the interface and set the context
+     */
     JsPrintInterface(Context c, String macAddress) {
         mContext = c;
         this.macAddress = macAddress;
     }
 
     @JavascriptInterface
-    public void sendCpclOverBluetooth() {
-        this.printOverBluetooth(this.macAddress);
+    public void sendCpclOverBluetooth(String numeroInventario, String modello) {
+        this.printOverBluetooth(this.macAddress, numeroInventario, modello);
     }
 
-    private void printOverBluetooth(final String theBtMacAddress) {
+    private void printOverBluetooth(final String theBtMacAddress, final String numeroInventario, final String modello) {
         new Thread(new Runnable() {
             public void run() {
                 try {
@@ -36,17 +39,27 @@ public class JsPrintInterface {
                     // Open the connection - physical connection is established here.
                     thePrinterConn.open();
 
-                    StringBuilder sb = new StringBuilder("! 0 200 200 438 1\r\n");
+                    StringBuilder sb = new StringBuilder("! 0 200 200 405 1\r\n");
                     sb.append("PW 575\r\n")
                             .append("TONE 0\r\n")
                             .append("SPEED 2\r\n")
                             .append("ON-FEED IGNORE\r\n")
                             .append("NO-PACE\r\n")
                             .append("BAR-SENSE\r\n")
-                            .append("T 5 2 10 309 Numero Inventario: 123123123")
-                            .append("BT 7 0 9\r\n")
-                            .append("B 128 4 30 132 36 37 123456789012\r\n")
+                            .append("CENTER\r\n")
+                            .append("B QR 203 50 M 2 U 8\r\n")
+                            .append("MA,99999999\r\n")
+                            .append("ENDQR\r\n")
+                            .append("CENTER\r\n")
+                            .append("T 5 2 27 233 Numero Inventario:")
+                            .append(numeroInventario)
+                            .append("\r\n")
+                            .append("CENTER\r\n")
+                            .append("T 5 0 64 292 ")
+                            .append(modello)
+                            .append("\r\n")
                             .append("PRINT\r\n");
+
                     String cpclData = sb.toString();
 
                     // Send the data to printer as a byte array.
